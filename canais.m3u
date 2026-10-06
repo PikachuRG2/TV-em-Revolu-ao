@@ -2168,6 +2168,6 @@ http://45.162.64.114/CNT/index.m3u8
 https://video08.logicahost.com.br/portaldatropical02/portaldatropical02/chunklist.m3u8
 #EXTINF:-1,Rede TV
 http://45.162.64.114/REDE_TV/index.m3u8
-#EXTINF:-1 tvg-id="TVBahia.br@HD",TV Bahia
+#EXTINF:-1 tvg-id="Globo TV.br@HD",TV Bahia
 http://hls1.sua.tv/live/globotvbahiafhdbr2/s.m3u8
 https://hls1.sua.tv/live/globotvbahiafhdbr2/s.m3u8
