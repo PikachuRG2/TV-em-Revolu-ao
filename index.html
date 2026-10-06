@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RG2 TV</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#070707;color:#fff;font-family:Arial,Helvetica,sans-serif;height:100vh;overflow:hidden}
+header{height:62px;background:#111;display:flex;align-items:center;padding:0 18px;gap:18px;border-bottom:1px solid #222}
+.logo{font-size:25px;font-weight:800;color:#e50914}.logo span{color:#fff}
+.search{flex:1;max-width:520px;background:#1c1c1c;border:1px solid #333;border-radius:8px;color:#fff;padding:11px 14px;outline:none}
+.layout{height:calc(100vh - 62px);display:grid;grid-template-columns:310px 1fr}
+aside{background:#101010;border-right:1px solid #242424;overflow:auto}
+#groups{padding:10px 10px 0;display:flex;gap:6px;flex-wrap:wrap}
+.group{border:1px solid #333;background:#191919;color:#ddd;border-radius:15px;padding:6px 10px;font-size:12px;cursor:pointer}
+.group.active{background:#e50914;border-color:#e50914;color:#fff}
+#channels{padding:8px}
+.channel{display:flex;align-items:center;gap:9px;padding:10px;border-radius:7px;cursor:pointer;margin-bottom:2px}
+.channel:hover,.channel.active{background:#222}
+.channel img{width:38px;height:38px;object-fit:contain;background:#181818;border-radius:5px}
+.channel .name{font-size:13px;line-height:1.2}
+main{display:flex;flex-direction:column;min-width:0;background:#000}
+.playerWrap{flex:1;display:flex;align-items:center;justify-content:center;background:#000;min-height:0}
+video{width:100%;height:100%;object-fit:contain;background:#000}
+.info{height:72px;padding:12px 18px;background:#111;border-top:1px solid #222}
+.title{font-weight:bold;font-size:16px}.status{font-size:12px;color:#aaa;margin-top:5px}
+.empty{padding:25px;color:#888;text-align:center}
+@media(max-width:760px){.layout{grid-template-columns:1fr}.layout aside{height:240px;border-right:0;border-bottom:1px solid #222}.playerWrap{height:calc(100vh - 374px);flex:none}header{padding:0 10px}.logo{font-size:20px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">RG2<span> TV</span></div>
+  <input id="search" class="search" placeholder="Pesquisar canal..." autocomplete="off">
+</header>
+<div class="layout">
+  <aside>
+    <div id="groups"></div>
+    <div id="channels"><div class="empty">Carregando canais...</div></div>
+  </aside>
+  <main>
+    <div class="playerWrap"><video id="video" controls playsinline></video></div>
+    <div class="info"><div id="title" class="title">Selecione um canal</div><div id="status" class="status">A playlist será carregada pelo servidor HTTPS.</div></div>
+  </main>
+</div>
+<script>
+const PLAYLIST="/canais.m3u";
+const video=document.getElementById("video");
+const channelsEl=document.getElementById("channels");
+const groupsEl=document.getElementById("groups");
+const searchEl=document.getElementById("search");
+const titleEl=document.getElementById("title");
+const statusEl=document.getElementById("status");
+let channels=[], filtered=[], activeGroup="Todos", hls=null;
+
+function attr(s,n){
+  const m=s.match(new RegExp(n+'="([^"]*)"','i'));
+  return m?m[1]:"";
+}
+function parseM3U(text){
+  const lines=text.split(/\r?\n/), out=[];
+  for(let i=0;i<lines.length;i++){
+    if(!lines[i].startsWith("#EXTINF")) continue;
+    const info=lines[i];
+    let url="";
+    for(let j=i+1;j<lines.length;j++){
+      const x=lines[j].trim();
+      if(!x) continue;
+      if(x.startsWith("#")) continue;
+      url=x; i=j; break;
+    }
+    if(!url) continue;
+    const comma=info.indexOf(",");
+    const name=comma>=0?info.slice(comma+1).trim():"Canal";
+    out.push({name,url,group:attr(info,"group-title")||"Outros",logo:attr(info,"tvg-logo")});
+  }
+  return out;
+}
+function renderGroups(){
+  const groups=["Todos",...new Set(channels.map(x=>x.group).filter(Boolean))];
+  groupsEl.innerHTML=groups.map(g=>`<button class="group ${g===activeGroup?"active":""}" onclick="setGroup(${JSON.stringify(g)})">${escapeHtml(g)}</button>`).join("");
+}
+function setGroup(g){activeGroup=g;renderGroups();render();}
+function render(){
+  const q=searchEl.value.toLowerCase().trim();
+  filtered=channels.filter(c=>(activeGroup==="Todos"||c.group===activeGroup)&&(!q||c.name.toLowerCase().includes(q)));
+  channelsEl.innerHTML="";
+  if(!filtered.length){channelsEl.innerHTML='<div class="empty">Nenhum canal encontrado.</div>';return;}
+  const frag=document.createDocumentFragment();
+  filtered.forEach(c=>{
+    const el=document.createElement("div");el.className="channel";
+    el.innerHTML=(c.logo?`<img src="${escapeAttr(c.logo)}" loading="lazy" onerror="this.style.display='none'">`:"")+`<div class="name">${escapeHtml(c.name)}</div>`;
+    el.onclick=()=>play(c,el);frag.appendChild(el);
+  });
+  channelsEl.appendChild(frag);
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
+function escapeAttr(s){return escapeHtml(s);}
+function proxied(url){return "/api/proxy?url="+encodeURIComponent(url);}
+function play(c,el){
+  document.querySelectorAll(".channel.active").forEach(x=>x.classList.remove("active"));
+  el.classList.add("active");
+  titleEl.textContent=c.name;
+  statusEl.textContent="Conectando ao stream...";
+  if(hls){hls.destroy();hls=null;}
+  video.pause();video.removeAttribute("src");video.load();
+  const src=proxied(c.url);
+  if(window.Hls && Hls.isSupported()){
+    hls=new Hls({enableWorker:true,maxBufferLength:30});
+    hls.loadSource(src);hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED,()=>{statusEl.textContent="Conectado";video.play().catch(()=>{});});
+    hls.on(Hls.Events.ERROR,(e,d)=>{
+      if(d.fatal) statusEl.textContent="Erro no stream: "+(d.details||"falha de reprodução");
+    });
+  }else if(video.canPlayType("application/vnd.apple.mpegurl")){
+    video.src=src;video.addEventListener("loadedmetadata",()=>{statusEl.textContent="Conectado";video.play().catch(()=>{});},{once:true});
+  }else{
+    statusEl.textContent="Seu navegador não suporta HLS.";
+  }
+}
+searchEl.addEventListener("input",render);
+
+async function init(){
+  try{
+    const r=await fetch(PLAYLIST,{cache:"no-store"});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const text=await r.text();
+    channels=parseM3U(text);
+    renderGroups();render();
+    statusEl.textContent=`${channels.length} canais carregados`;
+  }catch(e){
+    channelsEl.innerHTML=`<div class="empty">Não foi possível carregar a playlist.<br>${escapeHtml(e.message)}</div>`;
+    statusEl.textContent="Erro ao carregar a playlist.";
+  }
+}
+init();
+</script>
+</body>
+</html>
