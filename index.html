@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RG2 TV</title>
+<title>RG2 TV</title>\n<link rel="icon" href="data:,">
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#070707;color:#fff;font-family:Arial,Helvetica,sans-serif;height:100vh;overflow:hidden}
@@ -79,7 +79,14 @@ function parseM3U(text){
 }
 function renderGroups(){
   const groups=["Todos",...new Set(channels.map(x=>x.group).filter(Boolean))];
-  groupsEl.innerHTML=groups.map(g=>`<button class="group ${g===activeGroup?"active":""}" onclick="setGroup(${JSON.stringify(g)})">${escapeHtml(g)}</button>`).join("");
+  groupsEl.innerHTML="";
+  groups.forEach(g=>{
+    const b=document.createElement("button");
+    b.className="group"+(g===activeGroup?" active":"");
+    b.textContent=g;
+    b.addEventListener("click",()=>setGroup(g));
+    groupsEl.appendChild(b);
+  });
 }
 function setGroup(g){activeGroup=g;renderGroups();render();}
 function render(){
@@ -90,7 +97,7 @@ function render(){
   const frag=document.createDocumentFragment();
   filtered.forEach(c=>{
     const el=document.createElement("div");el.className="channel";
-    el.innerHTML=(c.logo?`<img src="${escapeAttr(c.logo)}" loading="lazy" onerror="this.style.display='none'">`:"")+`<div class="name">${escapeHtml(c.name)}</div>`;
+    el.innerHTML=`<div class="name">${escapeHtml(c.name)}</div>`;
     el.onclick=()=>play(c,el);frag.appendChild(el);
   });
   channelsEl.appendChild(frag);
@@ -111,7 +118,7 @@ function play(c,el){
     hls.loadSource(src);hls.attachMedia(video);
     hls.on(Hls.Events.MANIFEST_PARSED,()=>{statusEl.textContent="Conectado";video.play().catch(()=>{});});
     hls.on(Hls.Events.ERROR,(e,d)=>{
-      if(d.fatal) statusEl.textContent="Erro no stream: "+(d.details||"falha de reprodução");
+      if(d.fatal) statusEl.textContent="Erro no stream: "+(d.details||"falha de reprodução")+" — o servidor de origem pode estar offline ou bloqueando o proxy.";
     });
   }else if(video.canPlayType("application/vnd.apple.mpegurl")){
     video.src=src;video.addEventListener("loadedmetadata",()=>{statusEl.textContent="Conectado";video.play().catch(()=>{});},{once:true});
